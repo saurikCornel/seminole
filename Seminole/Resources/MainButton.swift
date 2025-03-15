@@ -13,25 +13,37 @@ struct MainButton: View {
     let strokeColor: Color
     let textColor: Color
     let size: CGFloat
+    let action: (() -> Void)?
     
-    init(text: String, strokeColor: Color = .black, textColor: Color = .white, size: CGFloat = 36) {
+    init(
+        text: String,
+        strokeColor: Color = .black,
+        textColor: Color = .white,
+        size: CGFloat = 36,
+        action:  (() -> Void)? = nil
+    ) {
         self.text = text
         self.strokeColor = strokeColor
         self.textColor = textColor
         self.size = size
+        self.action = action
     }
     
     var body: some View {
-        ZStack {
-            Assets.Button.main
-                .resizable()
-                .frame(width: Constants.Button.rectangleBig.width, height: Constants.Button.rectangleBig.height)
-            StrokedText(
-                text: text,
-                strokeColor: strokeColor,
-                textColor: textColor,
-                size: size
-            )
+        Button {
+            action?()
+        } label: {
+            ZStack {
+                Assets.Button.main
+                    .resizable()
+                    .frame(width: Constants.Button.rectangleBig.width, height: Constants.Button.rectangleBig.height)
+                StrokedText(
+                    text: text,
+                    strokeColor: strokeColor,
+                    textColor: textColor,
+                    size: size
+                )
+            }
         }
     }
 }

@@ -8,6 +8,9 @@
 import SwiftUI
 
 struct SettingsView: View {
+    
+    @Environment(\.presentationMode) var presentationMode
+    @Binding var path: NavigationPath
     @State private var soundEnabled = true
     
     var body: some View {
@@ -15,24 +18,10 @@ struct SettingsView: View {
             Assets.Images.backgroundImage
             
             VStack(spacing: 16) {
-                ZStack(alignment: .center) {
-                    StrokedText(text: "SETTINGS", strokeColor: .black, textColor: .white)
-                    
-                    HStack {
-                        Button(action: {
-                            // Действие для закрытия экрана
-                            dismiss()
-                        }) {
-                            Assets.Button.home
-                                .resizable()
-                                .frame(width: Constants.Button.circleSmall.width, height: Constants.Button.circleSmall.height)
-                        }
-                        .padding()
-                        
-                        Spacer()
-                    }
-                }
                 
+                NavigationItem(title: "SETTINGS", type: .home) {
+                    dismiss()
+                }
                 
                 Spacer()
                 
@@ -53,14 +42,14 @@ struct SettingsView: View {
                 
                 Spacer()
                 
-                NavigationLink(destination: RulesView()) {
-                    MainButton(text: "RULES")
+                MainButton(text: "RULES") {
+                    path.append("rules")
                 }
+
             }.padding()
         }
+        .navigationBarBackButtonHidden(true)
     }
-    
-    @Environment(\.presentationMode) var presentationMode
     
     private func dismiss() {
         presentationMode.wrappedValue.dismiss()
@@ -68,17 +57,38 @@ struct SettingsView: View {
 }
 
 struct RulesView: View {
+    
+    @Environment(\.presentationMode) var presentationMode
+    @Binding var path: NavigationPath
+
     var body: some View {
         ZStack {
             Assets.Images.backgroundImage
-            Text("Game Rules Placeholder")
-                .font(.title)
-                .foregroundColor(.white)
-                .shadow(radius: 5)
-        }
+            VStack {
+                NavigationItem(title: "Rules",type: .home) {
+                    path = NavigationPath()
+                }
+                Spacer()
+                Text("The goal of the game is to capture all cells using tentacles for attack and defense, with different cell types offering various abilities. The interface includes a shop, settings, and buttons for starting levels and viewing rules.")
+                    .font(.Cubano(size: 30))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(24)
+                    .padding(.bottom, 44)
+                MainButton(text: "Back") {
+                    dismiss()
+                }
+            }.padding()
+           
+        }.navigationBarBackButtonHidden(true)
     }
-}
-
-#Preview {
-    SettingsView()
+    
+    
+    private func dismiss() {
+        presentationMode.wrappedValue.dismiss()
+    }
+    
+    private func home() {
+        
+    }
 }

@@ -28,9 +28,32 @@ struct Assets {
         static let settings = Image("settingsButton")
         static let shop = Image("shopButton")
         static let home = Image("homeButton")
+        static let back = Image("backButton")
         static let main = Image("defaultButton")
         static let soundOn = Image("sound_on")
         static let soundOff = Image("sound_off")
+    }
+    
+    enum Cell {
+        enum Enemy {
+            static let normal = Image("cell1")
+            static let attacked = Image("cellEnemy")
+        }
+        
+        enum Player {
+            static let red = Image("cell2")
+            static let purple = Image("cell3")
+            static let green = Image("cell4")
+        }
+
+        static let empty = Image("cellEmpty")
+        
+        static let locked = Image("lockedLevel")
+    }
+    
+    enum Star {
+        static let filled = Image("starFull")
+        static let empty = Image("starEmpty")
     }
 }
 

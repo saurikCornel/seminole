@@ -8,9 +8,8 @@
 import SwiftUI
 
 struct LevelSelectionView: View {
-    
     // MARK: - Модель данных
-    private let levels: [LevelModel] = LevelStorage.shared.loadLevels()
+    @State private var levels: [LevelModel] = LevelStorage.shared.loadLevels()
     
     // Колонки для сетки
     private let columns = Array(repeating: GridItem(.fixed(90), spacing: 8), count: 4)
@@ -19,11 +18,14 @@ struct LevelSelectionView: View {
     @Environment(\.presentationMode) var presentationMode
     @Binding var path: NavigationPath  // Используем path для навигации
     
+    @State private var selectedLevel: LevelModel?
+    @State private var gameState: GameState?
+    
     var body: some View {
         ZStack(alignment: .top) {
             Assets.Images.backgroundImage
                 .ignoresSafeArea()
-
+            
             VStack {
                 // Верхняя панель навигации
                 NavigationItem(title: "LEVELS", type: .back, action: {
@@ -31,44 +33,54 @@ struct LevelSelectionView: View {
                 })
                 .padding(.bottom)
                 
-                VStack {
-                    LazyVGrid(columns: columns, spacing: 8) {
-                        ForEach(levels) { level in
-                            LevelCellView(level: level) {
-                                path.append(String(level.number))
-                            }
-                            .disabled(level.isLocked)
-                            .frame(width: 90, height: 90)
+                LazyVGrid(columns: columns, spacing: 8) {
+                    ForEach(levels) { level in
+                        LevelCellView(level: level) {
+                            startGame(with: level)
                         }
+                        .disabled(level.isLocked)
+                        .frame(width: 90, height: 90)
                     }
-                    .padding()
                 }
+                .padding()
                 
                 Spacer()
             }
             .padding()
+            
+            if let gameState = gameState {
+                GameView(path: $path) { result in
+                    if result == .win {
+                        LevelStorage.shared.updateLevel(
+                            levelNumber: gameState.currentLevel,
+                            isLocked: false,
+                            stars: gameState.starRating
+                        )
+                        
+                        levels = LevelStorage.shared.loadLevels() // Перезагружаем уровни
+                        
+                        if let index = levels.firstIndex(where: { $0.id == gameState.currentLevel }),
+                           index + 1 < levels.count {
+                            startGame(with: levels[index + 1])
+                        }
+                    } else {
+                        if let sameLevel = levels.first(where: { $0.id == gameState.currentLevel }) {
+                            startGame(with: sameLevel)
+                        }
+                    }
+                }
+                .environmentObject(gameState)
+            }
         }
         .navigationBarHidden(true)
+        .onAppear {
+            levels = LevelStorage.shared.loadLevels()
+        }
     }
-}
-
-// MARK: - Уровень (пример модели)
-struct LevelModel: Identifiable, Codable {
-    let id: UUID
-    let number: Int
-    let isLocked: Bool
-    let stars: Int?
-
-    init(
-        id: UUID = UUID(),
-        number: Int,
-        isLocked: Bool,
-        stars: Int?
-    ) {
-        self.id = id
-        self.number = number
-        self.isLocked = isLocked
-        self.stars = stars
+    
+    private func startGame(with level: LevelModel) {
+        selectedLevel = level
+        gameState = GameState(level: level.id)
     }
 }
 
@@ -90,7 +102,7 @@ struct LevelCellView: View {
                 if !level.isLocked {
                     VStack {
                         StrokedText(
-                            text: "\(level.number)",
+                            text: "\(level.id)",
                             strokeColor: .black,
                             textColor: .white,
                             size: 32

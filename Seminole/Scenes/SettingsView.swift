@@ -11,7 +11,7 @@ struct SettingsView: View {
     
     @Environment(\.presentationMode) var presentationMode
     @Binding var path: NavigationPath
-    @State private var soundEnabled = true
+    @State private var soundEnabled = MusicCentre.shared.isSoundOn
     
     var body: some View {
         ZStack {
@@ -27,6 +27,7 @@ struct SettingsView: View {
                 
                 Button(action: {
                     soundEnabled.toggle()
+                    MusicCentre.shared.isSoundOn = soundEnabled
                 }) {
                     soundEnabled ? Assets.Button.soundOn.resizable() : Assets.Button.soundOff.resizable()
                 }
@@ -44,6 +45,7 @@ struct SettingsView: View {
                 
                 MainButton(text: "RULES") {
                     path.append("rules")
+                    ShopStorage.shared.currentScreen = "rules"
                 }
 
             }.padding()
@@ -67,6 +69,7 @@ struct RulesView: View {
             VStack {
                 NavigationItem(title: "Rules",type: .home) {
                     path = NavigationPath()
+                    ShopStorage.shared.currentScreen = nil
                 }
                 Spacer()
                 Text("The goal of the game is to capture all cells using tentacles for attack and defense, with different cell types offering various abilities. The interface includes a shop, settings, and buttons for starting levels and viewing rules.")

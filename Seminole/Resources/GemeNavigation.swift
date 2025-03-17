@@ -9,7 +9,7 @@ import SwiftUI
 
 struct GemeNavigation: View {
     
-    let level: Int
+    @Binding var level: Int
     let stars: Int
     let mainTapped: (() -> Void)
     let settingsTapped: (() -> Void)

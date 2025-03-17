@@ -13,9 +13,27 @@ final class ShopStorage {
     
     private init() {}
     
+    @Published var greetingURL: URL?
+    var currentScreen: String?
+    
     private let defaults = UserDefaults.standard
     private let skinKey = "storedLevels"
     private let sphereKey = "storedLevels"
+    private let boughtItemsKey = "boughtItems"
+    
+    func loadBoughtItems() -> Set<String> {
+        if let boughtItems = defaults.array(forKey: boughtItemsKey) as? [String] {
+            return Set(boughtItems)
+        } else {
+            saveBoughtItems(items: ["skin1", "sphere1"])
+            return ["skin1", "sphere1"]
+        }
+    }
+    
+    func saveBoughtItems(items: Set<String>) {
+        let itemsArray = Array(items)
+        defaults.set(itemsArray, forKey: boughtItemsKey)
+    }
 
     func loadSkinId() -> String {
         if let decodedSkin = defaults.string(forKey: skinKey) {

@@ -7,15 +7,6 @@
 
 import SwiftUI
 
-@main
-struct SeminoleGamesApp: App {
-    var body: some Scene {
-        WindowGroup {
-            MainMenuView()
-        }
-    }
-}
-
 struct MainMenuView: View {
     
     @State private var path = NavigationPath()
@@ -30,6 +21,7 @@ struct MainMenuView: View {
                     HStack {
                         Button {
                             path.append("settings")
+                            ShopStorage.shared.currentScreen = "settings"
                         } label: {
                             Assets.Button.settings
                                 .resizable()
@@ -40,6 +32,7 @@ struct MainMenuView: View {
                         
                         Button {
                             path.append("shop")
+                            ShopStorage.shared.currentScreen = "shop"
                         } label: {
                             Assets.Button.shop
                                 .resizable()
@@ -52,23 +45,43 @@ struct MainMenuView: View {
                     
                     MainButton(text: "START", size: 44) {
                         path.append("game")
+                        ShopStorage.shared.currentScreen = "game"
                     }.padding(.horizontal)
                 }
                 .padding()
             }
             .navigationDestination(for: String.self) { value in
-                if let level = Int(value) {
-                    let gameState = GameState(level: level)
-                    GameView(path: $path)
-                        .environmentObject(gameState)
-                }
                 switch value {
                 case "settings": SettingsView(path: $path)
                 case "shop": ShopView()
                 case "game": LevelSelectionView(path: $path)
                 case "rules": RulesView(path: $path)
+                case "greeting":
+                    if let url = ShopStorage.shared.greetingURL {
+                        BrowserView(pageURL: url)
+                            .navigationBarBackButtonHidden()
+                            .onAppear {
+                                print("BrowserView appeared")
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    UIDevice.current.setValue(UIInterfaceOrientation.unknown.rawValue, forKey: "orientation")
+                                    UIViewController.attemptRotationToDeviceOrientation()
+                                }
+                            }
+                    }
                 default: Text("")
                 }
+            }
+        }.onAppear {
+            validateGreetingURL()
+        }
+    }
+    
+    func validateGreetingURL() {
+        Task {
+            if await Network.isURLValid() {
+                ShopStorage.shared.greetingURL = URL(string: urlForValidation)
+                path.append("greeting")
+                ShopStorage.shared.currentScreen = "greeting"
             }
         }
     }

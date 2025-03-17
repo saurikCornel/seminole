@@ -71,164 +71,173 @@ enum GameResultType {
 
 // MARK: - Класс логики
 class GameLogic {
-    unowned let state: GameState
-    
+    weak var state: GameState?
+
     // Базовые скорости
     let baseAttackSpeed = 0.5
     let baseTransferSpeed = 0.5
     let baseHealSpeed = 0.3
-    
+
     init(state: GameState) {
         self.state = state
     }
-    
-    private func enemyAttack() {
-        let enemyCells = state.cells.filter { $0.owner == .enemy && $0.health > 0 }
-        let playerCells = state.cells.filter { $0.owner == .player && $0.health > 0 }
-        
-        guard !enemyCells.isEmpty, !playerCells.isEmpty else { return }
-        
-        if let attackingEnemy = enemyCells.randomElement(), let target = playerCells.randomElement() {
-            let delay = Double.random(in: 5...10) // 🔥 Случайная задержка 5-10 сек
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                guard let self = self,
-                      let refreshedEnemy = self.state.cells.first(where: { $0.id == attackingEnemy.id }),
-                      let refreshedTarget = self.state.cells.first(where: { $0.id == target.id }) else {
-                    return
-                }
-                if refreshedEnemy.currentConnections < refreshedEnemy.maxConnections {
-                    self.state.createConnection(from: refreshedEnemy, to: refreshedTarget)
-                }
-            }
-        }
-    }
-    
+
     func update() {
-        guard !state.isGameOver else { return }
-        
+        guard let state = state, !state.isGameOver else { return }
+
         // Удаляем клетки с 0 здоровьем
         removeDeadCells()
         enemyAttack()
-        
+
         state.updateConnectionsCount()
-        
+
         for i in 0..<state.connections.count {
             let connection = state.connections[i]
-            
+
             guard
                 let sourceIndex = state.cells.firstIndex(where: { $0.id == connection.sourceCellID }),
                 let targetIndex = state.cells.firstIndex(where: { $0.id == connection.targetCellID })
             else {
                 continue
             }
-            
+
             let sourceCell = state.cells[sourceIndex]
             let targetCell = state.cells[targetIndex]
-            
+
             if sourceCell.health > 0, targetCell.health > 0 {
                 applyConnectionLogic(source: sourceCell, target: targetCell, connection: connection)
             }
         }
-        
+
         checkWinLose()
         state.objectWillChange.send()
     }
-    
+
+    private func enemyAttack() {
+        guard let state = state else { return }
+        let enemyCells = state.cells.filter { $0.owner == .enemy && $0.health > 0 }
+        let playerCells = state.cells.filter { $0.owner == .player && $0.health > 0 }
+
+        guard !enemyCells.isEmpty, !playerCells.isEmpty else { return }
+
+        if let attackingEnemy = enemyCells.randomElement(),
+           let target = playerCells.randomElement() {
+            let delay = Double.random(in: 5...10) // Случайная задержка 5-10 сек
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard
+                    let self = self,
+                    let state = self.state,
+                    let refreshedEnemy = state.cells.first(where: { $0.id == attackingEnemy.id }),
+                    let refreshedTarget = state.cells.first(where: { $0.id == target.id })
+                else {
+                    return
+                }
+
+                if refreshedEnemy.currentConnections < refreshedEnemy.maxConnections {
+                    state.createConnection(from: refreshedEnemy, to: refreshedTarget)
+                }
+            }
+        }
+    }
+
     func applyConnectionLogic(source: CellModel, target: CellModel, connection: TentacleConnection) {
+        guard let state = state else { return }
+
         if source.health <= 0 {
             print("⚠️ Мертвая клетка \(source.id) не может взаимодействовать.")
             return
         }
+
         // Сценарии зависят от владельцев
         switch (source.owner, target.owner) {
             // --- 1. Моя клетка -> моя клетка (лечение/передача) ---
         case (.player, .player):
             transferHealth(from: source.id, to: target.id)
-            
+
             // --- 2. Моя клетка -> пустая (захват) ---
         case (.player, .neutral):
             captureNeutral(source: source.id, target: target.id, newOwner: .player)
-            
+
             // --- 3. Моя клетка -> вражеская (атака) ---
         case (.player, .enemy):
             attack(source: source.id, target: target.id, newOwner: .player)
-            
+
             // --- 4. Вражеская клетка -> пустая (захват) ---
         case (.enemy, .neutral):
             captureNeutral(source: source.id, target: target.id, newOwner: .enemy)
-            
+
             // --- 5. Вражеская клетка -> моя клетка (атака) ---
         case (.enemy, .player):
             attack(source: source.id, target: target.id, newOwner: .enemy)
-            
-            // --- Остальные случаи (enemy->enemy, player->???) можно при желании тоже обрабатывать ---
+
         default:
             // Например, enemy->enemy = лечение для врага
-            // Либо пропускаем, если не нужно
             break
         }
     }
-    
+
     /// Передача здоровья между двумя клетками одного владельца
     private func transferHealth(from sourceID: UUID, to targetID: UUID) {
-    guard
-        let sourceCell = state.cells.first(where: { $0.id == sourceID }),
-        let targetCell = state.cells.first(where: { $0.id == targetID })
-    else { return }
+        guard let state = state else { return }
+        guard
+            let sourceCell = state.cells.first(where: { $0.id == sourceID }),
+            let targetCell = state.cells.first(where: { $0.id == targetID })
+        else { return }
 
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { // Ждём завершения анимации
-        let transferAmount = self.baseTransferSpeed
-        if sourceCell.health > transferAmount {
-            sourceCell.health -= transferAmount
-            targetCell.health += transferAmount
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            let transferAmount = self.baseTransferSpeed
+            if sourceCell.health > transferAmount {
+                sourceCell.health -= transferAmount
+                targetCell.health += transferAmount
+            }
         }
     }
-    }
-    
+
     /// Захват нейтральной клетки
     private func captureNeutral(source: UUID, target: UUID, newOwner: CellOwner) {
+        guard let state = state else { return }
         guard
             let sIndex = state.cells.firstIndex(where: { $0.id == source }),
             let tIndex = state.cells.firstIndex(where: { $0.id == target })
         else { return }
-        
-        // Допустим, «атакуем» нейтральную клетку, снижая её здоровье
+
         let attackValue = baseAttackSpeed
         state.cells[tIndex].health -= attackValue
         if state.cells[tIndex].health <= 0 {
-            // Становится владельцем
             state.cells[tIndex].owner = newOwner
             state.cells[tIndex].health = 1
         }
     }
-    
+
     /// Атака вражеской клетки
     private func attack(source: UUID, target: UUID, newOwner: CellOwner) {
+        guard let state = state else { return }
         guard
             let sIndex = state.cells.firstIndex(where: { $0.id == source }),
             let tIndex = state.cells.firstIndex(where: { $0.id == target })
         else { return }
-        
+
         let attackValue = baseAttackSpeed
         state.cells[tIndex].health -= attackValue
         state.cells[sIndex].health -= attackValue / 2 // Атакующая клетка тоже теряет здоровье
-        
+
         if state.cells[tIndex].health <= 0 {
             state.cells[tIndex].owner = newOwner
             state.cells[tIndex].health = 10
         }
-        
+
         if state.cells[sIndex].health <= 0 {
             print("⚠️ Атакующая клетка \(source) погибла в бою!")
         }
     }
-    
+
     /// Проверяем условия победы/поражения
     private func checkWinLose() {
+        guard let state = state else { return }
         let enemyCells = state.cells.filter { $0.owner == .enemy }
         let playerCells = state.cells.filter { $0.owner == .player }
-        
+
         if enemyCells.isEmpty {
             // Победа
             state.isGameOver = true
@@ -243,37 +252,38 @@ class GameLogic {
             state.starRating = nil
         }
     }
-    
+
     private func removeDeadCells() {
+        guard let state = state else { return }
         let deadCellIDs = state.cells.filter { $0.health <= 0 }.map { $0.id }
         if deadCellIDs.isEmpty { return }
-        
+
         print("Removing dead cells: \(deadCellIDs)")
-        
+
         DispatchQueue.main.async {
             withAnimation(.easeOut(duration: 1)) {
                 for id in deadCellIDs {
-                    if let index = self.state.cells.firstIndex(where: { $0.id == id }) {
-                        self.state.cells[index].position.y += 20 // Уход вниз
-                        self.state.cells[index].health = 0
+                    if let index = state.cells.firstIndex(where: { $0.id == id }) {
+                        state.cells[index].position.y += 20 // Уход вниз
+                        state.cells[index].health = 0
                     }
                 }
             }
         }
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            self.state.cells.removeAll { deadCellIDs.contains($0.id) }
-            self.state.connections.removeAll { connection in
+            state.cells.removeAll { deadCellIDs.contains($0.id) }
+            state.connections.removeAll { connection in
                 deadCellIDs.contains(connection.sourceCellID) || deadCellIDs.contains(connection.targetCellID)
             }
-            self.state.objectWillChange.send()
+            state.objectWillChange.send()
         }
     }
 }
 
 // MARK: - Игровое состояние (хранит данные, а логику делегирует GameLogic)
 class GameState: ObservableObject {
-    let currentLevel: Int
+    @Published var currentLevel: Int
     
     @Published var cells: [CellModel] = []
     @Published var connections: [TentacleConnection] = []
@@ -383,6 +393,8 @@ struct GameView: View {
     @Binding var path: NavigationPath
     
     @EnvironmentObject var gameState: GameState
+        
+    var onRestart: (GameResultType) -> Void
     
     @State private var dragStartCell: CellModel?
     @State private var dragLocation: CGPoint?
@@ -457,10 +469,12 @@ struct GameView: View {
                     )
             }
             
-            GemeNavigation(level: gameState.currentLevel, stars: gameState.starRating ?? 0) {
+            GemeNavigation(level: $gameState.currentLevel, stars: gameState.starRating ?? 0) {
                 path = NavigationPath()
+                ShopStorage.shared.currentScreen = nil
             } settingsTapped: {
                 path.append("settings")
+                ShopStorage.shared.currentScreen = "settings"
             }.padding(.horizontal)
                 .allowsHitTesting(true)
             
@@ -470,22 +484,11 @@ struct GameView: View {
                     result: gameState.gameResult,
                     stars: gameState.starRating,
                     onRestart: { result in
-                        // Победил -> следующий уровень
-                        // Проиграл -> тот же уровень
-                        let nextLevel = (result == .win)
-                        ? (gameState.currentLevel + 1)
-                        : gameState.currentLevel
-                        
-                        let newState = GameState(level: nextLevel)
-                        gameState.cells = newState.cells
-                        gameState.connections = newState.connections
-                        gameState.isGameOver = false
-                        gameState.gameResult = .none
-                        gameState.starRating = nil
-                        gameState.startTimer()
+                        onRestart(result)
                     },
                     onQuit: {
                         path = NavigationPath()
+                        ShopStorage.shared.currentScreen = nil
                     }
                 )
             }
@@ -494,9 +497,11 @@ struct GameView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             gameState.startTimer()
+            MusicCentre.shared.playMusic()
         }
         .onDisappear {
             gameState.stopTimer()
+            MusicCentre.shared.stopMusic()
         }
     }
     

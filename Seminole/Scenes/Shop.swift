@@ -11,16 +11,20 @@ struct ShopView: View {
     
     @Environment(\.presentationMode) var presentationMode
     
-    @State private var selectedSkin: String = "skin1" // Выбранный скин
-    @State private var stars: Int = 37 // Количество звезд игрока
+    @State private var selectedSkin: String = ShopStorage.shared.loadSkinId() // Выбранный скин
+    @State private var selectedSphere: String = ShopStorage.shared.loadSphereId() // Выбранный скин
+    @State private var stars: Int = LevelStorage.shared.loadLevels().compactMap { $0.stars }.reduce(0, +) // Количество звезд игрока
     
-    @State private var ownedSkins: Set<String> = ["1"] // Набор купленных скинов
+    @State private var ownedItems: Set<String> = ShopStorage.shared.loadBoughtItems() // Набор купленных скинов
     
-    private let items: [ShopItem] = [
+    private let spheres: [ShopItem] = [
         ShopItem(id: "sphere1", image: Assets.Sphere.first, price: 0),
         ShopItem(id: "sphere2", image: Assets.Sphere.second, price: 25),
         ShopItem(id: "sphere3", image: Assets.Sphere.third, price: 50),
-        ShopItem(id: "sphere4", image: Assets.Sphere.fourth, price: 75),
+        ShopItem(id: "sphere4", image: Assets.Sphere.fourth, price: 75)
+    ]
+    
+    private let skins: [ShopItem] = [
         ShopItem(id: "skin1", image: Assets.Cell.Player.red, price: 0),
         ShopItem(id: "skin2", image: Assets.Cell.Player.purple, price: 10),
         ShopItem(id: "skin3", image: Assets.Cell.Player.green, price: 20)
@@ -31,115 +35,162 @@ struct ShopView: View {
             Assets.Images.backgroundImage
             
             VStack {
-                GridView(items: items, selectedSkin: $selectedSkin, stars: $stars, ownedSkins: $ownedSkins)
-            }
-            
-            VStack {
-                NavigationItem(title: "SHOP", type: .home, action: {
-                    presentationMode.wrappedValue.dismiss()
-                })
-                
-                HStack {
-                    StrokedText(text: "\(stars)", strokeColor: .black, textColor: .yellow, size: 32)
-                    Assets.Star.filled
-                        .resizable()
-                        .frame(width: 24, height: 24)
+                VStack(spacing: 0) {
+                    NavigationItem(title: "SHOP", type: .home, action: {
+                        presentationMode.wrappedValue.dismiss()
+                    })
+                    
+                    HStack {
+                        StrokedText(text: "\(stars)", strokeColor: .black, textColor: .yellow, size: 32)
+                        Assets.Star.filled
+                            .resizable()
+                            .frame(width: 24, height: 24)
+                    }
+                }
+                VStack(spacing: 16) {
+                    HStack(spacing: 16) {
+                        ForEach(spheres.prefix(2), id: \.id) { item in
+                            let state: ButtonState = ownedItems.contains(item.id) ?
+                                (selectedSphere == item.id ? .selected : .select) : .buy(price: item.price)
+                            
+                            ItemView(item: item, buttonState: state) { state, item in
+                                handleItemSelection(state, item)
+                            }
+                        }
+                    }
+                    HStack(spacing: 16) {
+                        ForEach(spheres.suffix(2), id: \.id) { item in
+                            let state: ButtonState = ownedItems.contains(item.id) ?
+                                (selectedSphere == item.id ? .selected : .select) : .buy(price: item.price)
+
+                            ItemView(item: item, buttonState: state) { state, item in
+                                handleItemSelection(state, item)
+                            }
+                        }
+                    }
+                    HStack(spacing: 16) {
+                        ForEach(skins, id: \.id) { item in
+                            let state: ButtonState = ownedItems.contains(item.id) ?
+                            (selectedSkin == item.id ? .selected : .select) : .buy(price: item.price)
+
+                            ItemView(item: item, buttonState: state) { state, item in
+                                handleItemSelection(state, item)
+                            }
+                        }
+                    }
                 }
             }.padding()
         }.navigationBarBackButtonHidden()
+            .onDisappear(perform: {
+                ShopStorage.shared.saveBoughtItems(items: ownedItems)
+                ShopStorage.shared.saveSkinId(selectedSkin)
+                ShopStorage.shared.saveSphereId(selectedSphere)
+            })
+    }
+    
+    private func handleItemSelection(_ state: ButtonState, _ item: ShopItem) {
+        switch state {
+        case .buy(let price):
+            if stars >= price {
+                stars -= price
+                ownedItems.insert(item.id)
+                if item.id.contains("sphere") {
+                    selectedSphere = item.id
+                } else if item.id.contains("skin") {
+                    selectedSkin = item.id
+                }
+            }
+        case .select:
+            if item.id.contains("sphere") {
+                selectedSphere = item.id
+            } else if item.id.contains("skin") {
+                selectedSkin = item.id
+            }
+        default:
+            break
+        }
     }
 }
 
 // MARK: - Модель предмета магазина
+
 struct ShopItem: Identifiable {
     let id: String
     let image: Image
     let price: Int
 }
 
-// MARK: - Отображение предметов в магазине
-struct GridView: View {
-    let items: [ShopItem]
-    @Binding var selectedSkin: String
-    @Binding var stars: Int
-    @Binding var ownedSkins: Set<String>
-    
-    private let columns = [GridItem(.flexible()), GridItem(.flexible())]
+struct ItemView: View {
+    let item: ShopItem
+    var buttonState: ButtonState
+    let onTap: (ButtonState, ShopItem) -> Void
     
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 20) {
-            ForEach(items) { item in
-                VStack {
-                    item.image
-                        .resizable()
-                        .frame(width: 90, height: 90)
-                    
-                    if ownedSkins.contains(item.id) {
-                        if selectedSkin == item.id {
-                            Text("SELECTED")
-                                .foregroundColor(.yellow)
-                                .bold()
-                        } else {
-                            Button(action: {
-                                selectedSkin = item.id
-                            }) {
-                                
-                                ShopButton(text: "SELECT")
-                            }
-                        }
-                    } else {
-                        Button(action: {
-                            buyItem(item)
-                        }) {
-                            ShopButton(text: "Buy for \(item.price) stars")
-                        }
-                        .disabled(stars < item.price)
-                    }
-                }
+        VStack(spacing: 16) {
+            if item.id.contains("sphere") {
+                SpherView(image: item.image)
+                    .frame(width: 90, height: 90)
+            } else {
+                item.image
+                    .resizable()
+                    .frame(width: 90, height: 90)
             }
-        }.onAppear(perform: {
-            <#code#>
-        })
-        .onDisappear(perform: {
-            <#code#>
-        })
-        .padding()
-    }
-    
-    private func buyItem(_ item: ShopItem) {
-        guard stars >= item.price else { return }
-        stars -= item.price
-        ownedSkins.insert(item.id)
-        selectedSkin = item.id
+            ShopButton(state: buttonState) { state in
+                onTap(state, item)
+            }
+        }.frame(width: 100)
     }
 }
 
-struct Sphere: View {
-    let text: String
-    var state: State = .buy
-    let onTap: () -> Void
+struct ShopButton: View {
+    var state: ButtonState
+    let onTap: (ButtonState) -> Void
     
     var body: some View {
-        
-        VStack {
+        switch state {
+        case .buy(let price):
+            ZStack(alignment: .bottomTrailing) {
+                MainButton(text: "BUY", strokeColor: .black, textColor: .white, size: 22, settedFrame: .init(width: 100, height: 60)) {
+                    onTap(state)
+                }
+                HStack(spacing: 4) {
+                    StrokedText(text: "\(price)", strokeColor: .black, textColor: .yellow, size: 16)
+                    Assets.Star.filled
+                        .resizable()
+                        .frame(width: 16, height: 16)
+                }.padding(6)
+            }.frame(width: 100, height: 80)
             
+        case .select:
+            MainButton(text: "SELECT", strokeColor: .black, textColor: .white, size: 22, settedFrame: .init(width: 100, height: 60)) {
+                onTap(state)
+            }.frame(width: 100, height: 80)
+        case .selected:
+            StrokedText(text: "SELECTED", strokeColor: .yellow, textColor: .black, size: 22)
+                .frame(width: 100, height: 80)
         }
-        
-        ZStack {
-            Assets.Button.main
-                .resizable()
-                .frame(width: 100, height: 40)
-            StrokedText(text: text, strokeColor: .black, textColor: .white, size: 16)
-        }
-        
-        MainButton(text: "By", strokeColor: <#T##Color#>, textColor: <#T##Color#>, size: <#T##CGFloat#>, action: <#T##(() -> Void)?##(() -> Void)?##() -> Void#>)
     }
+}
+
+struct SpherView: View {
+    let image: Image
     
-    enum State {
-        case buy
-        case select
-        case selected
+    var body: some View {
+        ZStack {
+            Assets.Sphere.uLayer
+                .resizable()
+                .frame(width: 90, height: 90)
+            image
+                .resizable()
+                .frame(width: 70, height: 70)
+        }
     }
+}
+
+enum ButtonState {
+    case buy(price: Int)
+    case select
+    case selected
 }
 
 // MARK: - Превью

@@ -41,6 +41,13 @@ struct Assets {
         }
         
         enum Player {
+            static var current: Image {
+                switch ShopStorage.shared.loadSkinId() {
+                case "skin2": Cell.Player.purple
+                case "skin3": Cell.Player.green
+                default: Cell.Player.red
+                }
+            }
             static let red = Image("cell2")
             static let purple = Image("cell3")
             static let green = Image("cell4")
@@ -55,6 +62,23 @@ struct Assets {
         static let filled = Image("starFull")
         static let empty = Image("starEmpty")
     }
+    
+    enum Sphere {
+        static let first = Image("sphere1")
+        static let second = Image("sphere2")
+        static let third = Image("sphere3")
+        static let fourth = Image("sphere4")
+        static var current: Image {
+            switch ShopStorage.shared.loadSphereId() {
+            case "sphere2": Sphere.second
+            case "sphere3": Sphere.third
+            case "sphere4": Sphere.fourth
+            default: Sphere.first
+            }
+        }
+        static let uLayer = Image("uLayer")
+    }
+    
 }
 
 extension Font {

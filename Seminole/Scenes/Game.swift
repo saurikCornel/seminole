@@ -16,20 +16,20 @@ enum CellOwner {
 }
 
 // MARK: - Модель клетки
-class CellModel: Identifiable, Equatable {
+class CellModel: Identifiable, ObservableObject, Equatable {
     static func == (lhs: CellModel, rhs: CellModel) -> Bool {
         lhs.id == rhs.id
     }
     
     let id = UUID()
     let type: CellType
-    var owner: CellOwner
-    var health: Double
+    @Published var owner: CellOwner
+    @Published var health: Double
     var position: CGPoint
     
     // Максимальное количество соединений
     var maxConnections: Int = 2
-    var currentConnections: Int = 0
+    @Published var currentConnections: Int = 0
     
     init(type: CellType, owner: CellOwner, health: Double, position: CGPoint, maxConnections: Int = 2, currentConnections: Int = 0) {
         self.type = type
@@ -40,6 +40,7 @@ class CellModel: Identifiable, Equatable {
         self.currentConnections = currentConnections
     }
 }
+
 
 // MARK: - Модель связи (щупальца)
 class TentacleConnection: Identifiable {
@@ -80,51 +81,56 @@ class GameLogic {
     init(state: GameState) {
         self.state = state
     }
-
+    
     private func enemyAttack() {
         let enemyCells = state.cells.filter { $0.owner == .enemy && $0.health > 0 }
         let playerCells = state.cells.filter { $0.owner == .player && $0.health > 0 }
-
+        
         guard !enemyCells.isEmpty, !playerCells.isEmpty else { return }
-
+        
         if let attackingEnemy = enemyCells.randomElement(), let target = playerCells.randomElement() {
             let delay = Double.random(in: 5...10) // 🔥 Случайная задержка 5-10 сек
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            if attackingEnemy.currentConnections < attackingEnemy.maxConnections {
-                self.state.createConnection(from: attackingEnemy, to: target)
-            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self = self,
+                      let refreshedEnemy = self.state.cells.first(where: { $0.id == attackingEnemy.id }),
+                      let refreshedTarget = self.state.cells.first(where: { $0.id == target.id }) else {
+                    return
+                }
+                if refreshedEnemy.currentConnections < refreshedEnemy.maxConnections {
+                    self.state.createConnection(from: refreshedEnemy, to: refreshedTarget)
+                }
             }
         }
     }
     
     func update() {
         guard !state.isGameOver else { return }
-
+        
         // Удаляем клетки с 0 здоровьем
         removeDeadCells()
         enemyAttack()
         
         state.updateConnectionsCount()
-
+        
         for i in 0..<state.connections.count {
             let connection = state.connections[i]
-
+            
             guard
                 let sourceIndex = state.cells.firstIndex(where: { $0.id == connection.sourceCellID }),
                 let targetIndex = state.cells.firstIndex(where: { $0.id == connection.targetCellID })
             else {
                 continue
             }
-
+            
             let sourceCell = state.cells[sourceIndex]
             let targetCell = state.cells[targetIndex]
-
+            
             if sourceCell.health > 0, targetCell.health > 0 {
                 applyConnectionLogic(source: sourceCell, target: targetCell, connection: connection)
             }
         }
-
+        
         checkWinLose()
         state.objectWillChange.send()
     }
@@ -166,18 +172,18 @@ class GameLogic {
     
     /// Передача здоровья между двумя клетками одного владельца
     private func transferHealth(from sourceID: UUID, to targetID: UUID) {
-        guard
-            let sIndex = state.cells.firstIndex(where: { $0.id == sourceID }),
-            let tIndex = state.cells.firstIndex(where: { $0.id == targetID })
-        else { return }
+    guard
+        let sourceCell = state.cells.first(where: { $0.id == sourceID }),
+        let targetCell = state.cells.first(where: { $0.id == targetID })
+    else { return }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { // Ждём завершения анимации
-            let transferAmount = self.baseTransferSpeed
-            if  self.state.cells[sIndex].health > transferAmount {
-                self.state.cells[sIndex].health -= transferAmount
-                self.state.cells[tIndex].health += transferAmount
-            }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { // Ждём завершения анимации
+        let transferAmount = self.baseTransferSpeed
+        if sourceCell.health > transferAmount {
+            sourceCell.health -= transferAmount
+            targetCell.health += transferAmount
         }
+    }
     }
     
     /// Захват нейтральной клетки
@@ -193,8 +199,7 @@ class GameLogic {
         if state.cells[tIndex].health <= 0 {
             // Становится владельцем
             state.cells[tIndex].owner = newOwner
-            // Частично восстанавливаем здоровье
-            state.cells[tIndex].health = 50
+            state.cells[tIndex].health = 1
         }
     }
     
@@ -208,12 +213,12 @@ class GameLogic {
         let attackValue = baseAttackSpeed
         state.cells[tIndex].health -= attackValue
         state.cells[sIndex].health -= attackValue / 2 // Атакующая клетка тоже теряет здоровье
-
+        
         if state.cells[tIndex].health <= 0 {
             state.cells[tIndex].owner = newOwner
             state.cells[tIndex].health = 10
         }
-
+        
         if state.cells[sIndex].health <= 0 {
             print("⚠️ Атакующая клетка \(source) погибла в бою!")
         }
@@ -242,25 +247,26 @@ class GameLogic {
     private func removeDeadCells() {
         let deadCellIDs = state.cells.filter { $0.health <= 0 }.map { $0.id }
         if deadCellIDs.isEmpty { return }
-
+        
         print("Removing dead cells: \(deadCellIDs)")
-
+        
         DispatchQueue.main.async {
             withAnimation(.easeOut(duration: 1)) {
-            for id in deadCellIDs {
-                if let index = self.state.cells.firstIndex(where: { $0.id == id }) {
-                    self.state.cells[index].position.y += 20 // Уход вниз
-                    self.state.cells[index].health = 0
+                for id in deadCellIDs {
+                    if let index = self.state.cells.firstIndex(where: { $0.id == id }) {
+                        self.state.cells[index].position.y += 20 // Уход вниз
+                        self.state.cells[index].health = 0
+                    }
                 }
             }
-            }
         }
-
+        
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             self.state.cells.removeAll { deadCellIDs.contains($0.id) }
             self.state.connections.removeAll { connection in
                 deadCellIDs.contains(connection.sourceCellID) || deadCellIDs.contains(connection.targetCellID)
             }
+            self.state.objectWillChange.send()
         }
     }
 }
@@ -287,7 +293,7 @@ class GameState: ObservableObject {
     
     init(level: Int) {
         self.currentLevel = level
-        self.cells = levels[level]
+        self.cells = LevelsBulder().getLevel(level)
         
         startTimer()
     }
@@ -296,7 +302,8 @@ class GameState: ObservableObject {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: updateInterval,
                                      repeats: true) { [weak self] _ in
-            self?.logic.update()
+            guard let self = self else { return }
+            self.logic.update()
         }
     }
     
@@ -305,11 +312,12 @@ class GameState: ObservableObject {
     }
     
     func updateConnectionsCount() {
-        for i in cells.indices {
+        objectWillChange.send()
+        for cell in cells {
             let connectedCount = connections.filter {
-                $0.sourceCellID == cells[i].id || $0.targetCellID == cells[i].id
+                $0.sourceCellID == cell.id || $0.targetCellID == cell.id
             }.count
-            cells[i].currentConnections = connectedCount
+            cell.currentConnections = connectedCount
         }
     }
     
@@ -318,20 +326,20 @@ class GameState: ObservableObject {
         print("Попытка создать соединение. Source: \(source.currentConnections)/\(source.maxConnections), Target: \(target.currentConnections)/\(target.maxConnections)")
         guard let sourceIndex = cells.firstIndex(where: { $0.id == source.id }),
               let targetIndex = cells.firstIndex(where: { $0.id == target.id }) else { return }
-
+        
         // Убедимся, что у обеих клеток есть доступные слоты для соединений
         if cells[sourceIndex].currentConnections >= cells[sourceIndex].maxConnections ||
-           cells[targetIndex].currentConnections >= cells[targetIndex].maxConnections {
+            cells[targetIndex].currentConnections >= cells[targetIndex].maxConnections {
             print("⚠️ Достигнут лимит соединений для одной из клеток!")
             return
         }
-
+        
         // Проверяем, существует ли уже такое соединение (в обе стороны)
-    if connections.contains(where: { ($0.sourceCellID == source.id && $0.targetCellID == target.id) ||
-                                      ($0.sourceCellID == target.id && $0.targetCellID == source.id) }) {
-        return
-    }
-
+        if connections.contains(where: { ($0.sourceCellID == source.id && $0.targetCellID == target.id) ||
+            ($0.sourceCellID == target.id && $0.targetCellID == source.id) }) {
+            return
+        }
+        
         // Создаём соединение
         let newConnection = TentacleConnection(
             sourceCellID: source.id,
@@ -340,9 +348,9 @@ class GameState: ObservableObject {
             progress: 0.0,
             strength: (source.type == .attack ? 2.0 : 1.0)
         )
-
+        
         connections.append(newConnection)
-
+        
         // Обновляем количество соединений
         cells[sourceIndex].currentConnections += 1
         cells[targetIndex].currentConnections += 1
@@ -351,33 +359,39 @@ class GameState: ObservableObject {
     func removeConnection(_ connection: TentacleConnection) {
         guard let sourceIndex = cells.firstIndex(where: { $0.id == connection.sourceCellID }),
               let targetIndex = cells.firstIndex(where: { $0.id == connection.targetCellID }) else { return }
-
+        
         // Удаляем соединение
         connections.removeAll { $0.id == connection.id }
-
+        
         // Освобождаем слоты соединений
         if let sourceIndex = cells.firstIndex(where: { $0.id == connection.sourceCellID }) {
             cells[sourceIndex].currentConnections = max(0, cells[sourceIndex].currentConnections - 1)
         }
-
+        
         if let targetIndex = cells.firstIndex(where: { $0.id == connection.targetCellID }) {
             cells[targetIndex].currentConnections = max(0, cells[targetIndex].currentConnections - 1)
         }
-
+        
         print("🔴 Соединение удалено: \(connection.id). Source connections: \(cells[sourceIndex].currentConnections), Target connections: \(cells[targetIndex].currentConnections)")
+        
     }}
 
 // MARK: - Экран игры
 struct GameView: View {
-    @ObservedObject var gameState: GameState
+    
+    @Environment(\.presentationMode) var presentationMode
+    @Binding var path: NavigationPath
+    
+    @EnvironmentObject var gameState: GameState
     
     @State private var dragStartCell: CellModel?
     @State private var dragLocation: CGPoint?
     
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             // Фон
             Assets.Images.backgroundImage
+                .ignoresSafeArea()
             
             // Линии (щупальца)
             ForEach(gameState.connections, id: \.id) { connection in
@@ -385,15 +399,15 @@ struct GameView: View {
                    let target = gameState.cells.first(where: { $0.id == connection.targetCellID }) {
                     TentacleView(sourcePoint: source.position, targetPoint: target.position, owner: connection.owner,
                                  onConnectionComplete: {
-                                     gameState.logic.applyConnectionLogic(source: source, target: target, connection: connection)
-                                 },
+                        gameState.logic.applyConnectionLogic(source: source, target: target, connection: connection)
+                    },
                                  onDelete: {
-                                     gameState.removeConnection(connection)
-                                 })
+                        gameState.removeConnection(connection)
+                    })
                 }
             }
             
-//             Временная линия для визуализации соединения при drag
+            //             Временная линия для визуализации соединения при drag
             if let startCell = dragStartCell, let loc = dragLocation {
                 Path { path in
                     path.move(to: startCell.position)
@@ -443,6 +457,13 @@ struct GameView: View {
                     )
             }
             
+            GemeNavigation(level: gameState.currentLevel, stars: gameState.starRating ?? 0) {
+                path = NavigationPath()
+            } settingsTapped: {
+                path.append("settings")
+            }.padding(.horizontal)
+                .allowsHitTesting(true)
+            
             // Экран результата
             if gameState.isGameOver {
                 GameResultView(
@@ -464,11 +485,13 @@ struct GameView: View {
                         gameState.startTimer()
                     },
                     onQuit: {
-                        // Выход / меню
+                        path = NavigationPath()
                     }
                 )
             }
         }
+        .navigationBarBackButtonHidden(true)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             gameState.startTimer()
         }
@@ -484,14 +507,14 @@ struct GameView: View {
 
 // MARK: - Пример вью клетки
 struct CellView: View {
-    let cell: CellModel
+    @ObservedObject var cell: CellModel
     
     var body: some View {
         ZStack {
             // Примерно: подбираем картинку по владельцу/типу
             switch cell.owner {
             case .player:
-                Assets.Cell.Player.red.resizable()
+                Assets.Cell.Player.current.resizable()
             case .enemy:
                 Assets.Cell.Enemy.normal.resizable()
             case .neutral:
@@ -499,10 +522,8 @@ struct CellView: View {
             }
             
             // Обводка по владельцу
-            Circle()
-                .stroke(borderColor(for: cell.owner), lineWidth: 3)
-                .frame(width: 60, height: 60)
-                .overlay(Circle().stroke(Color.black.opacity(0.3), lineWidth: 1)) // Добавляем легкую тень
+            Assets.Sphere.current.resizable()
+                .frame(width: 100, height: 100)
             
             // Текст: здоровье
             VStack {
@@ -533,10 +554,10 @@ struct TentacleView: View {
     let owner: CellOwner
     let onConnectionComplete: () -> Void
     let onDelete: () -> Void
-
+    
     @State private var progress: CGFloat = 0.0
     @State private var isDeleting: Bool = false
-
+    
     var body: some View {
         ZStack {
             // Основная линия соединения
@@ -566,20 +587,12 @@ struct TentacleView: View {
             }
         }
     }
-
+    
     private func midpoint(_ p1: CGPoint, _ p2: CGPoint) -> CGPoint {
         return CGPoint(x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2)
     }
-
+    
     private func distance(_ p1: CGPoint, _ p2: CGPoint) -> CGFloat {
         return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2))
-    }
-}
-
-// MARK: - Превью
-struct Game_Preview: PreviewProvider {
-    static var previews: some View {
-        let state = GameState(level: 1)
-        GameView(gameState: state)
     }
 }

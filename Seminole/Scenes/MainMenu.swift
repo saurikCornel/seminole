@@ -9,13 +9,9 @@ import SwiftUI
 
 @main
 struct SeminoleGamesApp: App {
-    let state = GameState(level: 1)
-    
     var body: some Scene {
         WindowGroup {
-//            MainMenuView()
-            
-            GameView(gameState: state)
+            MainMenuView()
         }
     }
 }
@@ -61,27 +57,19 @@ struct MainMenuView: View {
                 .padding()
             }
             .navigationDestination(for: String.self) { value in
+                if let level = Int(value) {
+                    let gameState = GameState(level: level)
+                    GameView(path: $path)
+                        .environmentObject(gameState)
+                }
                 switch value {
                 case "settings": SettingsView(path: $path)
                 case "shop": ShopView()
-                case "game": LevelSelectionView()
+                case "game": LevelSelectionView(path: $path)
                 case "rules": RulesView(path: $path)
                 default: Text("")
                 }
             }
-        }
-    }
-}
-
-struct ShopView: View {
-    var body: some View {
-        ZStack {
-            Assets.Images.backgroundImage
-            
-            Text("Shop Screen - Placeholder")
-                .font(.title)
-                .foregroundColor(.white)
-                .shadow(radius: 5)
         }
     }
 }

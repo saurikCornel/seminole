@@ -12,12 +12,16 @@ struct SeminoleGamesApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     var body: some Scene {
         WindowGroup {
-            MainMenuView()
+            Launch()
         }
     }
 }
 
 class AppDelegate: NSObject, UIApplicationDelegate {
+    func applicationDidFinishLaunching(_ application: UIApplication) {
+        ShopStorage.shared.getGreeting()
+    }
+    
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         let currentScreen = ShopStorage.shared.currentScreen
         if currentScreen == "greeting" {

@@ -38,21 +38,19 @@ final class LevelStorage {
     }
     
     /// Обновляет уровень (меняет `isLocked` и количество `stars`) и открывает следующий
-    func updateLevel(levelNumber: Int, isLocked: Bool? = nil, stars: Int? = nil) {
+    func updateLevel(levelNumber: Int, isLocked: Bool, stars: Int? = nil) {
         var allLevels = loadLevels()
+        guard levelNumber <= allLevels.count else { return }
         
-        if let index = allLevels.firstIndex(where: { $0.id == levelNumber }) {
+        if let _ = allLevels.first(where: { $0.id == levelNumber }) {
             // Обновляем текущий уровень
-            var currentLevel = allLevels[index]
-            currentLevel.isLocked = isLocked ?? currentLevel.isLocked
-            currentLevel.stars = max(currentLevel.stars ?? 0, stars ?? 0) // Сохраняем лучший результат
-            allLevels[index] = currentLevel
+            var newLevel = LevelModel(number: levelNumber, isLocked: isLocked, stars: stars)
+            allLevels[levelNumber - 1] = newLevel
             
             // Разблокируем следующий уровень, если он есть
-            if index + 1 < allLevels.count {
-                var nextLevel = allLevels[index + 1]
-                nextLevel.isLocked = false
-                allLevels[index + 1] = nextLevel
+            if levelNumber + 1 < allLevels.count {
+                var nextLevel = LevelModel(number: levelNumber + 1, isLocked: false, stars: nil)
+                allLevels[levelNumber] = nextLevel
             }
             
             // Сохраняем обновленный список уровней
@@ -73,8 +71,8 @@ final class LevelStorage {
 /// Модель уровня
 struct LevelModel: Identifiable, Codable, Equatable {
     let id: Int
-    var isLocked: Bool
-    var stars: Int?
+    let isLocked: Bool
+    let stars: Int?
 
     init(number: Int, isLocked: Bool, stars: Int?) {
         self.id = number

@@ -56,32 +56,8 @@ struct MainMenuView: View {
                 case "shop": ShopView()
                 case "game": LevelSelectionView(path: $path)
                 case "rules": RulesView(path: $path)
-                case "greeting":
-                    if let url = ShopStorage.shared.greetingURL {
-                        BrowserView(pageURL: url)
-                            .navigationBarBackButtonHidden()
-                            .onAppear {
-                                print("BrowserView appeared")
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    UIDevice.current.setValue(UIInterfaceOrientation.unknown.rawValue, forKey: "orientation")
-                                    UIViewController.attemptRotationToDeviceOrientation()
-                                }
-                            }
-                    }
                 default: Text("")
                 }
-            }
-        }.onAppear {
-            validateGreetingURL()
-        }
-    }
-    
-    func validateGreetingURL() {
-        Task {
-            if await Network.isURLValid() {
-                ShopStorage.shared.greetingURL = URL(string: urlForValidation)
-                path.append("greeting")
-                ShopStorage.shared.currentScreen = "greeting"
             }
         }
     }

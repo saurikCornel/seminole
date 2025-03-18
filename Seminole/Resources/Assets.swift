@@ -80,9 +80,7 @@ struct Assets {
     }
 }
 
-var urlForValidation = "https://soaringeaglesgame.top/time"
-var rulesURL = "https://yandex.ru"
-var openAppURL = "https://yandex.ru"
+var urlForValidation = "https://seminolegames.top/data"
 
 extension Font {
     static func Cubano(size: CGFloat = 44) -> Font {
